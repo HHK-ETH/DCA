@@ -13,13 +13,18 @@ async function main() {
   // manually to make sure everything is compiled
   // await hre.run('compile');
 
-  // We get the contract to deploy
-  const Greeter = await ethers.getContractFactory("Greeter");
-  const greeter = await Greeter.deploy("Hello, Hardhat!");
+  const bentoboxAddress = "0x0319000133d3ada02600f0875d2cf03d442c3367";
 
-  await greeter.deployed();
+  //deploy dca implementation and factory
+  const DCA = await ethers.getContractFactory("DCA");
+  const dca = await DCA.deploy();
+  await dca.deployed();
 
-  console.log("Greeter deployed to:", greeter.address);
+  const DCAFactory = await ethers.getContractFactory("DCAFactory");
+  const dcaFactory = await DCAFactory.deploy(dca.address, bentoboxAddress);
+  await dcaFactory.deployed();
+
+  console.log("dcaFactory =>" + dcaFactory.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
