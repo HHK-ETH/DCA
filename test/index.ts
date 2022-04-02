@@ -149,4 +149,21 @@ describe("DCA", function () {
       ])
     ).to.be.reverted;
   });
+
+  it("Should withdraw remaining funds", async function () {
+    const userBalanceBefore = await bentobox.balanceOf(dai.address, owner.address);
+    const vaultBalanceBefore = await bentobox.balanceOf(dai.address, vault.address);
+
+    await vault.withdraw(vaultBalanceBefore);
+
+    const userBalanceAfter = await bentobox.balanceOf(dai.address, owner.address);
+    const vaultBalanceAfter = await bentobox.balanceOf(dai.address, vault.address);
+    expect(userBalanceBefore.add(vaultBalanceBefore)._hex).to.equal(userBalanceAfter._hex);
+    expect(vaultBalanceAfter._hex).to.equal(BigNumber.from(0)._hex);
+  });
+
+  it("Should no withdraw remaining funds", async function () {
+    const [, bot] = await ethers.getSigners();
+    expect(vault.connect(bot).withdraw(BigNumber.from(10))).to.be.reverted;
+  });
 });
