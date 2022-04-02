@@ -1,5 +1,6 @@
 // import { expect } from "chai";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { expect } from "chai";
 import { BigNumber } from "ethers";
 import { AbiCoder, formatUnits } from "ethers/lib/utils";
 import { ethers } from "hardhat";
@@ -113,11 +114,39 @@ describe("DCA", function () {
   });
 
   it("Should execute DCA", async function () {
-    await vault.executeDCA([
+    const [, bot] = await ethers.getSigners();
+    const userBalanceBefore = await bentobox.balanceOf(weth.address, owner.address);
+    const botBalanceBefore = await bentobox.balanceOf(weth.address, bot.address);
+    const minAmount = BigNumber.from(10)
+      .pow(18)
+      .mul(100)
+      .div((await priceAggregator.latestAnswer()).div(BigNumber.from(10).pow(8)))
+      .mul(99)
+      .div(100);
+    await vault.connect(bot).executeDCA([
       {
         pool: lp.address,
         data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, vault.address, false]),
       },
     ]);
+    const userBalanceAfter = await bentobox.balanceOf(weth.address, owner.address);
+    const botBalanceAfter = await bentobox.balanceOf(weth.address, bot.address);
+    const logs = await bentobox.queryFilter(bentobox.filters.LogTransfer(weth.address, vault.address, bot.address));
+    const amountReceivedByBot = logs[0].args.share;
+
+    expect(userBalanceBefore.add(minAmount)._hex).to.equal(userBalanceAfter._hex);
+    expect(botBalanceBefore.add(amountReceivedByBot)._hex).to.equal(botBalanceAfter._hex);
+  });
+
+  it("Should not execute DCA", async function () {
+    const [, bot] = await ethers.getSigners();
+    expect(
+      vault.connect(bot).executeDCA([
+        {
+          pool: lp.address,
+          data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, vault.address, false]),
+        },
+      ])
+    ).to.be.reverted;
   });
 });
