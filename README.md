@@ -9,3 +9,4 @@ DCA factory and vault built on top of bentobox and trident
 * Interest bearing - Assets are sitting in the BentoBox and generate yield.
 * Sushi - Generates fees for xSushi holders by enforcing Trident usage.
 * Easy to use - Just transfer shares to the vault, orders are executed as long as there is enough token sitting inside.
+* Long term - Bots are incentived to monitor and execute transactions as they receive up to 1% of the order.
