@@ -13,7 +13,7 @@ DCA factory and vault built on top of bentobox and trident
 
 ## Deployments
 
-### Polygon
+### Polygon (legacy, new version coming)
 
 * DCA implementation => 0xD34578B88577B0101E3f254E71090950d6261004
 * DCA factory => 0xE25cb7B7e8cA345807ec3E92A72E86CB85920922
