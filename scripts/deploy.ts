@@ -24,7 +24,8 @@ async function main() {
   const dcaFactory = await DCAFactory.deploy(dca.address, bentoboxAddress);
   await dcaFactory.deployed();
 
-  console.log("dcaFactory =>" + dcaFactory.address);
+  console.log("dcaImpl => " + dca.address);
+  console.log("dcaFactory => " + dcaFactory.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
