@@ -109,7 +109,8 @@ contract DCA is Clone {
       minAmount = (((ratio * buyAmount) * (10**decimalsDiff)) * 99) / 100 / 1e24;
     }
 
-    //execute the swap on trident.
+    //execute the swap on trident by default but since we don't check if pools are whitelisted
+    //an intermediate contract could redirect the swap to pools outside of trident.
     bento.transfer(sellToken(), address(this), path[0].pool, buyAmount);
     for (uint256 i; i < path.length; ) {
       IPool(path[i].pool).swap(path[i].data);
