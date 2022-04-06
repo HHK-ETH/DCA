@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.11;
+pragma solidity ^0.8.13;
 
 import {ClonesWithImmutableArgs} from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
 import "./DCA.sol";
@@ -34,19 +34,33 @@ contract DCAFactory {
   ///@param owner Address of the owner of the vault
   ///@param sellToken Address of the token to sell
   ///@param buyToken Address of the token to buy
-  ///@param priceFeed Address of the priceFeed to use
+  ///@param sellTokenPriceFeed Address of the priceFeed to use to determine sell token price
+  ///@param buyTokenPriceFeed Address of the priceFeed to use to determine buy token price
   ///@param epochDuration Minimum time between each buy
+  ///@param decimalsDiff buyToken decimals - sellToken decimals
   ///@param amount Amount to use on each buy
   ///@return newVault Vault address
   function createDCA(
     address owner,
     address sellToken,
     address buyToken,
-    address priceFeed,
+    address sellTokenPriceFeed,
+    address buyTokenPriceFeed,
     uint64 epochDuration,
+    uint64 decimalsDiff,
     uint256 amount
   ) external returns (DCA newVault) {
-    bytes memory data = abi.encodePacked(bentobox, owner, sellToken, buyToken, priceFeed, epochDuration, amount);
+    bytes memory data = abi.encodePacked(
+      bentobox,
+      owner,
+      sellToken,
+      buyToken,
+      sellTokenPriceFeed,
+      buyTokenPriceFeed,
+      epochDuration,
+      decimalsDiff,
+      amount
+    );
     newVault = DCA(address(implementation).clone(data));
     emit CreateDCA(newVault, 1);
   }

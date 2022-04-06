@@ -2,7 +2,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { BigNumber } from "ethers";
-import { AbiCoder, formatUnits } from "ethers/lib/utils";
+import { AbiCoder } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import { BentoBoxV1, ConstantProductPool, DCA, DCAFactory, PriceAggregator, Token, TridentRouter } from "../typechain";
 
@@ -10,7 +10,8 @@ describe("DCA", function () {
   let owner: SignerWithAddress,
     dai: Token,
     weth: Token,
-    priceAggregator: PriceAggregator,
+    sellTokenPriceAggregator: PriceAggregator,
+    buyTokenPriceAggregator: PriceAggregator,
     bentobox: BentoBoxV1,
     tridentRouter: TridentRouter,
     lp: ConstantProductPool,
@@ -23,16 +24,24 @@ describe("DCA", function () {
 
     //deploy tokens
     const Token = await ethers.getContractFactory("Token");
-    dai = await Token.deploy("DAI stablecoin", "DAI", BigNumber.from(18), BigNumber.from(10).pow(18).mul(100_000));
+    dai = await Token.deploy(
+      "DAI stablecoin",
+      "DAI",
+      BigNumber.from(18),
+      BigNumber.from(100_000).mul((1e18).toString())
+    );
     await dai.deployed();
-    weth = await Token.deploy("Wrapped ETH", "WETH", BigNumber.from(18), BigNumber.from(10).pow(18).mul(100));
+    weth = await Token.deploy("Wrapped ETH", "WETH", BigNumber.from(18), BigNumber.from(100).mul((1e18).toString()));
     await weth.deployed();
 
-    //deploy price aggregator
+    //deploy price aggregators
     const PriceAggregator = await ethers.getContractFactory("PriceAggregator");
-    priceAggregator = await PriceAggregator.deploy("8");
-    await priceAggregator.deployed();
-    await priceAggregator.setLatestAnswer(BigNumber.from(10).pow(8).mul(3000)); //3000$ per WETH
+    sellTokenPriceAggregator = await PriceAggregator.deploy("8");
+    buyTokenPriceAggregator = await PriceAggregator.deploy("8");
+    await sellTokenPriceAggregator.deployed();
+    await buyTokenPriceAggregator.deployed();
+    await sellTokenPriceAggregator.setLatestAnswer(BigNumber.from(1).mul((1e8).toString())); //1$ per DAI
+    await buyTokenPriceAggregator.setLatestAnswer(BigNumber.from(3000).mul((1e8).toString())); //3000$ per WETH
 
     //deploy bentobox
     const Bentobox = await ethers.getContractFactory("BentoBoxV1");
@@ -100,9 +109,11 @@ describe("DCA", function () {
       owner.address,
       dai.address,
       weth.address,
-      priceAggregator.address,
+      sellTokenPriceAggregator.address,
+      buyTokenPriceAggregator.address,
       3600 * 24 * 7, //Once a week
-      BigNumber.from(10).pow(18).mul(100) //100 DAI
+      0,
+      BigNumber.from(100).mul((1e18).toString()) //100 DAI
     );
 
     const logs = await dcaFactory.queryFilter(dcaFactory.filters.CreateDCA());
@@ -116,11 +127,9 @@ describe("DCA", function () {
   it("Should execute DCA", async function () {
     const [, bot] = await ethers.getSigners();
     const userBalanceBefore = await bentobox.balanceOf(weth.address, owner.address);
-    const botBalanceBefore = await bentobox.balanceOf(weth.address, bot.address);
-    const minAmount = BigNumber.from(10)
-      .pow(18)
-      .mul(100)
-      .div((await priceAggregator.latestAnswer()).div(BigNumber.from(10).pow(8)))
+    const minAmount = BigNumber.from(100)
+      .mul((1e18).toString())
+      .div((await buyTokenPriceAggregator.latestAnswer()).div(BigNumber.from(10).pow(8)))
       .mul(99)
       .div(100);
     await vault.connect(bot).executeDCA([
@@ -130,12 +139,11 @@ describe("DCA", function () {
       },
     ]);
     const userBalanceAfter = await bentobox.balanceOf(weth.address, owner.address);
-    const botBalanceAfter = await bentobox.balanceOf(weth.address, bot.address);
-    const logs = await bentobox.queryFilter(bentobox.filters.LogTransfer(weth.address, vault.address, bot.address));
-    const amountReceivedByBot = logs[0].args.share;
+    console.log(userBalanceBefore.toString());
+    console.log(userBalanceAfter.toString());
+    console.log(minAmount.toString());
 
     expect(userBalanceBefore.add(minAmount)._hex).to.equal(userBalanceAfter._hex);
-    expect(botBalanceBefore.add(amountReceivedByBot)._hex).to.equal(botBalanceAfter._hex);
   });
 
   it("Should not execute DCA", async function () {

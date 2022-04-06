@@ -45,19 +45,29 @@ contract DCA is Clone {
   }
 
   ///@notice Infos about the DCA
-  ///@return _priceFeed Address of the priceFeed
+  ///@return _sellTokenPriceFeed Address of the priceFeed
+  ///@return _buyTokenPriceFeed Address of the priceFeed
   ///@return _epochDuration Minimum time between each buy
+  ///@return _decimalsDiff buyToken decimals - sellToken decimals
   ///@return _buyAmount Amount of token to use as swap input
   function dcaData()
     public
     pure
     returns (
-      IAggregatorInterface _priceFeed,
+      IAggregatorInterface _sellTokenPriceFeed,
+      IAggregatorInterface _buyTokenPriceFeed,
       uint64 _epochDuration,
+      uint64 _decimalsDiff,
       uint256 _buyAmount
     )
   {
-    return (IAggregatorInterface(_getArgAddress(80)), _getArgUint64(100), _getArgUint256(108));
+    return (
+      IAggregatorInterface(_getArgAddress(80)),
+      IAggregatorInterface(_getArgAddress(100)),
+      _getArgUint64(120),
+      _getArgUint64(128),
+      _getArgUint256(136)
+    );
   }
 
   /// -----------------------------------------------------------------------
@@ -74,19 +84,32 @@ contract DCA is Clone {
   ///@notice Execute the DCA buy
   ///@param path Path to use when swapping on trident
   function executeDCA(ITrident.Path[] calldata path) external {
-    (IAggregatorInterface priceFeed, uint64 epochDuration, uint256 buyAmount) = dcaData();
+    (
+      IAggregatorInterface sellTokenPriceFeed,
+      IAggregatorInterface buyTokenPriceFeed,
+      uint64 epochDuration,
+      uint64 decimalsDiff,
+      uint256 buyAmount
+    ) = dcaData();
     IBentoBox bento = bentoBox();
 
     if (lastBuy + epochDuration > block.timestamp) {
       revert ToClose();
     }
-    lastBuy = block.timestamp; //update lastBuy to make it non reentrant
+    lastBuy = block.timestamp;
 
-    //only support 18 decimals tokens atm
-    int256 price = priceFeed.latestAnswer();
-    uint256 minAmount = ((buyAmount / (uint256(price) / (10**priceFeed.decimals()))) * 99) / 100;
+    //query oracles and determine minAmount, both priceFeed must have same decimals.
+    uint256 sellTokenPrice = uint256(sellTokenPriceFeed.latestAnswer());
+    uint256 buyTokenPrice = uint256(buyTokenPriceFeed.latestAnswer());
 
-    //execute the swap on trident
+    uint256 minAmount;
+
+    unchecked {
+      uint256 ratio = (sellTokenPrice * 1e24) / buyTokenPrice;
+      minAmount = (((ratio * buyAmount) * (10**decimalsDiff)) * 99) / 100 / 1e24;
+    }
+
+    //execute the swap on trident.
     bento.transfer(sellToken(), address(this), path[0].pool, buyAmount);
     for (uint256 i; i < path.length; ) {
       IPool(path[i].pool).swap(path[i].data);
@@ -95,9 +118,9 @@ contract DCA is Clone {
       }
     }
 
-    //transfer minAmount to owner directly
+    //transfer minAmount minus 1% fee to the owner.
     bento.transfer(buyToken(), address(this), owner(), bento.toShare(buyToken(), minAmount, false));
-    //transfer remaining shares from owner to dca executor as a reward.
+    //transfer remaining shares (up to 1% of minAmount) from the vault to dca executor as a reward.
     bento.transfer(buyToken(), address(this), msg.sender, bento.balanceOf(buyToken(), address(this)));
 
     emit ExecuteDCA(lastBuy, minAmount);
