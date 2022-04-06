@@ -5,6 +5,7 @@ DCA factory and vault built on top of bentobox and trident
 ## Benefits
 
 * Decentralized - Everything is onchain.
+* Low fees - 1% fees on executed orders.
 * Highly customizable - Anyone can execute orders, any buy frequency can be selected, any oracle, most tokens.
 * Interest bearing - Assets are sitting in the BentoBox and generate yield.
 * Sushi - Generates fees for xSushi holders by using Trident pools by default (can be override).
