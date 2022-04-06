@@ -47,7 +47,7 @@ contract DCAFactory {
     address sellTokenPriceFeed,
     address buyTokenPriceFeed,
     uint64 epochDuration,
-    uint64 decimalsDiff,
+    uint8 decimalsDiff,
     uint256 amount
   ) external returns (DCA newVault) {
     bytes memory data = abi.encodePacked(

@@ -57,7 +57,7 @@ contract DCA is Clone {
       IAggregatorInterface _sellTokenPriceFeed,
       IAggregatorInterface _buyTokenPriceFeed,
       uint64 _epochDuration,
-      uint64 _decimalsDiff,
+      uint8 _decimalsDiff,
       uint256 _buyAmount
     )
   {
@@ -65,8 +65,8 @@ contract DCA is Clone {
       IAggregatorInterface(_getArgAddress(80)),
       IAggregatorInterface(_getArgAddress(100)),
       _getArgUint64(120),
-      _getArgUint64(128),
-      _getArgUint256(136)
+      _getArgUint8(128),
+      _getArgUint256(129)
     );
   }
 
@@ -82,13 +82,13 @@ contract DCA is Clone {
   /// -----------------------------------------------------------------------
 
   ///@notice Execute the DCA buy
-  ///@param path Path to use when swapping on trident
+  ///@param path Trident path
   function executeDCA(ITrident.Path[] calldata path) external {
     (
       IAggregatorInterface sellTokenPriceFeed,
       IAggregatorInterface buyTokenPriceFeed,
       uint64 epochDuration,
-      uint64 decimalsDiff,
+      uint8 decimalsDiff,
       uint256 buyAmount
     ) = dcaData();
     IBentoBox bento = bentoBox();
@@ -128,7 +128,7 @@ contract DCA is Clone {
   }
 
   ///@notice Allow the owner to withdraw its token from the vault
-  function withdraw(uint256 _share) public {
+  function withdraw(uint256 _share) external {
     if (msg.sender != owner()) {
       revert OwnerOnly();
     }
