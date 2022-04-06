@@ -10,45 +10,49 @@ describe("DCA", function () {
   let owner: SignerWithAddress,
     dai: Token,
     weth: Token,
-    sellTokenPriceAggregator: PriceAggregator,
-    buyTokenPriceAggregator: PriceAggregator,
+    usdc: Token,
+    daiOracle: PriceAggregator,
+    usdcOracle: PriceAggregator,
+    wethOracle: PriceAggregator,
     bentobox: BentoBoxV1,
     tridentRouter: TridentRouter,
-    lp: ConstantProductPool,
-    dca: DCA,
+    lpDaiWeth: ConstantProductPool,
+    lpUsdcWeth: ConstantProductPool,
     dcaFactory: DCAFactory,
-    vault: DCA;
+    daiWethVault: DCA,
+    usdcWethVault: DCA;
 
   before(async function () {
     [owner] = await ethers.getSigners();
 
     //deploy tokens
     const Token = await ethers.getContractFactory("Token");
-    dai = await Token.deploy(
-      "DAI stablecoin",
-      "DAI",
-      BigNumber.from(18),
-      BigNumber.from(100_000).mul((1e18).toString())
-    );
+    dai = await Token.deploy("DAI stable", "DAI", 18, BigNumber.from(100_000).mul((1e18).toString()));
     await dai.deployed();
-    weth = await Token.deploy("Wrapped ETH", "WETH", BigNumber.from(18), BigNumber.from(100).mul((1e18).toString()));
+    usdc = await Token.deploy("USD Coin", "USDC", 6, BigNumber.from(100_000).mul((1e6).toString()));
+    await dai.deployed();
+    weth = await Token.deploy("Wrapped ETH", "WETH", 18, BigNumber.from(100).mul((1e18).toString()));
     await weth.deployed();
 
     //deploy price aggregators
     const PriceAggregator = await ethers.getContractFactory("PriceAggregator");
-    sellTokenPriceAggregator = await PriceAggregator.deploy("8");
-    buyTokenPriceAggregator = await PriceAggregator.deploy("8");
-    await sellTokenPriceAggregator.deployed();
-    await buyTokenPriceAggregator.deployed();
-    await sellTokenPriceAggregator.setLatestAnswer(BigNumber.from(1).mul((1e8).toString())); //1$ per DAI
-    await buyTokenPriceAggregator.setLatestAnswer(BigNumber.from(3000).mul((1e8).toString())); //3000$ per WETH
+    daiOracle = await PriceAggregator.deploy(8);
+    usdcOracle = await PriceAggregator.deploy(8);
+    wethOracle = await PriceAggregator.deploy(8);
+    await daiOracle.deployed();
+    await usdcOracle.deployed();
+    await wethOracle.deployed();
+    await daiOracle.setLatestAnswer(BigNumber.from((1e8).toString())); //1$ per DAI
+    await usdcOracle.setLatestAnswer(BigNumber.from((1e8).toString())); //1$ per USDC
+    await wethOracle.setLatestAnswer(BigNumber.from(3000).mul((1e8).toString())); //3000$ per WETH
 
     //deploy bentobox
     const Bentobox = await ethers.getContractFactory("BentoBoxV1");
     bentobox = await Bentobox.deploy(weth.address);
     await bentobox.deployed();
-    await dai.approve(bentobox.address, BigNumber.from(10).pow(18).mul(100_000));
-    await weth.approve(bentobox.address, BigNumber.from(10).pow(18).mul(100));
+    await dai.approve(bentobox.address, BigNumber.from(100_000).mul((1e18).toString()));
+    await usdc.approve(bentobox.address, BigNumber.from(100_000).mul((1e18).toString()));
+    await weth.approve(bentobox.address, BigNumber.from(100).mul((1e18).toString()));
 
     //deploy trident
     const MasterDeployer = await ethers.getContractFactory("MasterDeployer");
@@ -74,85 +78,158 @@ describe("DCA", function () {
       "0x0000000000000000000000000000000000000000000000000000000000000000"
     );
 
-    //deploy dai-weth pool and add liquidity
+    //deploy dai-weth pool
     await masterDeployer.deployPool(
       constantProductPoolFactory.address,
       new AbiCoder().encode(["address", "address", "uint256", "bool"], [dai.address, weth.address, "30", false])
     );
 
+    //deploy usdc-weth pool
+    await masterDeployer.deployPool(
+      constantProductPoolFactory.address,
+      new AbiCoder().encode(["address", "address", "uint256", "bool"], [usdc.address, weth.address, "30", false])
+    );
+
+    //deposit tokens into bento
+    await bentobox.deposit(dai.address, owner.address, owner.address, BigNumber.from(50_000).mul((1e18).toString()), 0);
+    await bentobox.deposit(usdc.address, owner.address, owner.address, BigNumber.from(50_000).mul((1e6).toString()), 0);
+    await bentobox.deposit(weth.address, owner.address, owner.address, BigNumber.from(20).mul((1e18).toString()), 0);
+
+    //find pool addresses
     const logs = await masterDeployer.queryFilter(masterDeployer.filters.DeployPool());
-    lp = await ethers.getContractAt("ConstantProductPool", logs[0].args.pool);
-    await bentobox.deposit(dai.address, owner.address, owner.address, BigNumber.from(10).pow(18).mul(50_000), 0);
-    await bentobox.deposit(weth.address, owner.address, owner.address, BigNumber.from(10).pow(18).mul(10), 0);
+    lpDaiWeth = await ethers.getContractAt("ConstantProductPool", logs[0].args.pool);
+    lpUsdcWeth = await ethers.getContractAt("ConstantProductPool", logs[1].args.pool);
+
+    //add liquidity in both pools
     await tridentRouter.addLiquidity(
       [
-        { token: dai.address, native: false, amount: BigNumber.from(10).pow(18).mul(30_000) },
-        { token: weth.address, native: false, amount: BigNumber.from(10).pow(18).mul(10) },
+        { token: dai.address, native: false, amount: BigNumber.from(30_000).mul((1e18).toString()) },
+        { token: weth.address, native: false, amount: BigNumber.from(10).mul((1e18).toString()) },
       ],
-      lp.address,
+      lpDaiWeth.address,
+      0,
+      new AbiCoder().encode(["address"], [owner.address])
+    );
+    await tridentRouter.addLiquidity(
+      [
+        { token: usdc.address, native: false, amount: BigNumber.from(30_000).mul((1e6).toString()) },
+        { token: weth.address, native: false, amount: BigNumber.from(10).mul((1e18).toString()) },
+      ],
+      lpUsdcWeth.address,
       0,
       new AbiCoder().encode(["address"], [owner.address])
     );
 
     //deploy dca implementation and factory
     const DCA = await ethers.getContractFactory("DCA");
-    dca = await DCA.deploy();
+    const dca = await DCA.deploy();
     await dca.deployed();
 
     const DCAFactory = await ethers.getContractFactory("DCAFactory");
     dcaFactory = await DCAFactory.deploy(dca.address, bentobox.address);
     await dcaFactory.deployed();
-  });
 
-  it("Should create a new vault", async function () {
+    //create dai=>weth and usdc=>weth vaults
     await dcaFactory.createDCA(
       owner.address,
       dai.address,
       weth.address,
-      sellTokenPriceAggregator.address,
-      buyTokenPriceAggregator.address,
+      daiOracle.address,
+      wethOracle.address,
       3600 * 24 * 7, //Once a week
-      0,
+      0, //both 18 decimals
       BigNumber.from(100).mul((1e18).toString()) //100 DAI
     );
+    await dcaFactory.createDCA(
+      owner.address,
+      usdc.address,
+      weth.address,
+      usdcOracle.address,
+      wethOracle.address,
+      3600 * 24 * 7, //Once a week
+      12, //6 vs 18 decimals
+      BigNumber.from(100).mul((1e6).toString()) //100 USDC
+    );
 
-    const logs = await dcaFactory.queryFilter(dcaFactory.filters.CreateDCA());
-    vault = await ethers.getContractAt("DCA", logs[0].args.newVault);
+    const factoryLogs = await dcaFactory.queryFilter(dcaFactory.filters.CreateDCA());
+    daiWethVault = await ethers.getContractAt("DCA", factoryLogs[0].args.newVault);
+    usdcWethVault = await ethers.getContractAt("DCA", factoryLogs[1].args.newVault);
+
+    //transfer tokens to the newly created vaults
+    await bentobox.transfer(
+      dai.address,
+      owner.address,
+      daiWethVault.address,
+      BigNumber.from(1_000).mul((1e18).toString())
+    );
+    await bentobox.transfer(
+      usdc.address,
+      owner.address,
+      usdcWethVault.address,
+      BigNumber.from(1_000).mul((1e6).toString())
+    );
   });
 
-  it("Should transfer to vault", async function () {
-    await bentobox.transfer(dai.address, owner.address, vault.address, BigNumber.from(10).pow(18).mul(1_000));
-  });
-
-  it("Should execute DCA", async function () {
+  it("Should execute dai=>weth DCA (no decimals diff)", async function () {
     const [, bot] = await ethers.getSigners();
     const userBalanceBefore = await bentobox.balanceOf(weth.address, owner.address);
     const minAmount = BigNumber.from(100)
       .mul((1e18).toString())
-      .div((await buyTokenPriceAggregator.latestAnswer()).div(BigNumber.from(10).pow(8)))
+      .div((await wethOracle.latestAnswer()).div(BigNumber.from((1e8).toString())))
       .mul(99)
       .div(100);
-    await vault.connect(bot).executeDCA([
+    await daiWethVault.connect(bot).executeDCA([
       {
-        pool: lp.address,
-        data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, vault.address, false]),
+        pool: lpDaiWeth.address,
+        data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, daiWethVault.address, false]),
       },
     ]);
     const userBalanceAfter = await bentobox.balanceOf(weth.address, owner.address);
-    console.log(userBalanceBefore.toString());
-    console.log(userBalanceAfter.toString());
-    console.log(minAmount.toString());
 
     expect(userBalanceBefore.add(minAmount)._hex).to.equal(userBalanceAfter._hex);
   });
 
-  it("Should not execute DCA", async function () {
+  it("Should execute usdc=>weth DCA (decimals diff)", async function () {
+    const [, bot] = await ethers.getSigners();
+    const userBalanceBefore = await bentobox.balanceOf(weth.address, owner.address);
+    const minAmount = BigNumber.from(100)
+      .mul((1e6).toString())
+      .mul((1e12).toString())
+      .div((await wethOracle.latestAnswer()).div(BigNumber.from((1e8).toString())))
+      .mul(99)
+      .div(100);
+    await usdcWethVault.connect(bot).executeDCA([
+      {
+        pool: lpUsdcWeth.address,
+        data: new AbiCoder().encode(["address", "address", "bool"], [usdc.address, usdcWethVault.address, false]),
+      },
+    ]);
+    const userBalanceAfter = await bentobox.balanceOf(weth.address, owner.address);
+
+    expect(userBalanceBefore.add(minAmount)._hex).to.equal(userBalanceAfter._hex);
+  });
+
+  it("Should revert on executing dai=>weth DCA because ToClose()", async function () {
     const [, bot] = await ethers.getSigners();
     expect(
-      vault.connect(bot).executeDCA([
+      daiWethVault.connect(bot).executeDCA([
         {
-          pool: lp.address,
-          data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, vault.address, false]),
+          pool: lpDaiWeth.address,
+          data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, daiWethVault.address, false]),
+        },
+      ])
+    ).to.be.reverted;
+  });
+
+  it("Should revert on executing dai=>weth DCA because amountOut to small", async function () {
+    const [, bot] = await ethers.getSigners();
+    //add 1 week so no ToClose() revert
+    await ethers.provider.send("evm_increaseTime", [3600 * 24 * 7]);
+    expect(
+      daiWethVault.connect(bot).executeDCA([
+        {
+          pool: lpDaiWeth.address,
+          data: new AbiCoder().encode(["address", "address", "bool"], [dai.address, daiWethVault.address, false]),
         },
       ])
     ).to.be.reverted;
@@ -160,18 +237,18 @@ describe("DCA", function () {
 
   it("Should withdraw remaining funds", async function () {
     const userBalanceBefore = await bentobox.balanceOf(dai.address, owner.address);
-    const vaultBalanceBefore = await bentobox.balanceOf(dai.address, vault.address);
+    const vaultBalanceBefore = await bentobox.balanceOf(dai.address, daiWethVault.address);
 
-    await vault.withdraw(vaultBalanceBefore);
+    await daiWethVault.withdraw(vaultBalanceBefore);
 
     const userBalanceAfter = await bentobox.balanceOf(dai.address, owner.address);
-    const vaultBalanceAfter = await bentobox.balanceOf(dai.address, vault.address);
+    const vaultBalanceAfter = await bentobox.balanceOf(dai.address, daiWethVault.address);
     expect(userBalanceBefore.add(vaultBalanceBefore)._hex).to.equal(userBalanceAfter._hex);
     expect(vaultBalanceAfter._hex).to.equal(BigNumber.from(0)._hex);
   });
 
-  it("Should no withdraw remaining funds", async function () {
+  it("Should revert on withdraw because OwnerOnly()", async function () {
     const [, bot] = await ethers.getSigners();
-    expect(vault.connect(bot).withdraw(BigNumber.from(10))).to.be.reverted;
+    expect(daiWethVault.connect(bot).withdraw(BigNumber.from(10))).to.be.reverted;
   });
 });
