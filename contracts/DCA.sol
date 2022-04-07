@@ -19,6 +19,7 @@ contract DCA is Clone {
   /// Events
   /// -----------------------------------------------------------------------
   event ExecuteDCA(uint256 timestamp, uint256 amount);
+  event Withdraw(uint256 share);
 
   /// -----------------------------------------------------------------------
   /// Immutable variables
@@ -133,5 +134,6 @@ contract DCA is Clone {
       revert OwnerOnly();
     }
     bentoBox().transfer(sellToken(), address(this), owner(), _share);
+    emit Withdraw(_share);
   }
 }
