@@ -131,11 +131,11 @@ contract DCA is Clone {
   }
 
   ///@notice Allow the owner to withdraw its token from the vault
-  function withdraw(uint256 _shares) external {
+  function withdraw(uint256 shares) external {
     if (msg.sender != owner()) {
       revert OwnerOnly();
     }
-    bentoBox().transfer(sellToken(), address(this), owner(), _shares);
-    emit Withdraw(_shares);
+    bentoBox().transfer(sellToken(), address(this), owner(), shares);
+    emit Withdraw(shares);
   }
 }
