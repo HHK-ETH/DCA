@@ -16,5 +16,5 @@ DCA factory and vault built on top of bentobox and trident
 
 ### Polygon
 
-* DCA implementation => [0xE024a4e5B9243cB1aE1BDF78bC45B08AC14AEd91](https://polygonscan.com/address/0xE024a4e5B9243cB1aE1BDF78bC45B08AC14AEd91)
-* DCA factory => [0x22cE2cac44E09e75751BdB2f3818bC043807b786](https://polygonscan.com/address/0x22cE2cac44E09e75751BdB2f3818bC043807b786)
+* DCA implementation => [0x10f3A0d0dC80B3902262B00b42eccbB348B50078](https://polygonscan.com/address/0x10f3A0d0dC80B3902262B00b42eccbB348B50078)
+* DCA factory => [0x17DA2C3D6863eF41D7A5e862fCE164e2563CF51E](https://polygonscan.com/address/0x17DA2C3D6863eF41D7A5e862fCE164e2563CF51E)
