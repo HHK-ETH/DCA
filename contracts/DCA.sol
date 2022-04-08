@@ -104,11 +104,13 @@ contract DCA is Clone {
     uint256 buyTokenPrice = uint256(buyTokenPriceFeed.latestAnswer());
 
     uint256 minAmount;
-
     unchecked {
       uint256 ratio = (sellTokenPrice * 1e24) / buyTokenPrice;
       minAmount = (((ratio * buyAmount) * (10**decimalsDiff)) * 99) / 100 / 1e24;
     }
+
+    //convert amount to bento shares
+    buyAmount = bento.toShare(sellToken(), buyAmount, false);
 
     //execute the swap on trident by default but since we don't check if pools are whitelisted
     //an intermediate contract could redirect the swap to pools outside of trident.
@@ -129,11 +131,11 @@ contract DCA is Clone {
   }
 
   ///@notice Allow the owner to withdraw its token from the vault
-  function withdraw(uint256 _share) external {
+  function withdraw(uint256 _shares) external {
     if (msg.sender != owner()) {
       revert OwnerOnly();
     }
-    bentoBox().transfer(sellToken(), address(this), owner(), _share);
-    emit Withdraw(_share);
+    bentoBox().transfer(sellToken(), address(this), owner(), _shares);
+    emit Withdraw(_shares);
   }
 }
